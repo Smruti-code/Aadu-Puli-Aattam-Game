@@ -1,22 +1,13 @@
 extends Node2D
 
 # ============================================================
-# AADU PULI AATTAM - GOATS AND TIGERS
-# VERSION 1
-# Complete playable version with:
-# - Goat placement and movement
-# - Tiger movement and capture
-# - Win conditions
-# - Instructions screen
-# - Game over screen
-# - Restart / Play Again
-# - Improved visual feedback
+# AADU PULI AATTAM - VERSION 2
+# Human vs Tiger Strategist Edition
 # ============================================================
 
-
-# ============================================================
+# -----------------------------
 # GAME CONSTANTS
-# ============================================================
+# -----------------------------
 
 const EMPTY = 0
 const GOAT = 1
@@ -25,166 +16,249 @@ const TIGER = 2
 const GOAT_TURN = 0
 const TIGER_TURN = 1
 
-const POINT_RADIUS = 18.0
-const CLICK_RADIUS = 42.0
+const TOTAL_GOATS = 15
+const TIGER_WIN_CAPTURES = 5
 
+const POINT_RADIUS = 20.0
+const CLICK_RADIUS = 43.0
 
-# ============================================================
-# GAME VARIABLES
-# ============================================================
+const BOARD_WIDTH = 1000.0
+const BOARD_HEIGHT = 700.0
+
+# -----------------------------
+# BOARD
+# -----------------------------
+
+var points = [
+	Vector2(500, 100),
+	Vector2(410, 165),
+	Vector2(590, 165),
+
+	Vector2(330, 230),
+	Vector2(415, 230),
+	Vector2(500, 230),
+	Vector2(585, 230),
+	Vector2(670, 230),
+
+	Vector2(285, 315),
+	Vector2(355, 315),
+	Vector2(430, 315),
+	Vector2(570, 315),
+	Vector2(645, 315),
+	Vector2(715, 315),
+
+	Vector2(330, 405),
+	Vector2(415, 405),
+	Vector2(500, 405),
+	Vector2(585, 405),
+	Vector2(670, 405),
+
+	Vector2(410, 490),
+	Vector2(500, 490),
+	Vector2(590, 490),
+
+	Vector2(500, 565)
+]
+
+var connections = [
+	[1, 2],
+	[0, 2, 3, 4],
+	[0, 1, 4, 5],
+	[1, 4, 8, 9],
+	[1, 2, 3, 5, 9, 10],
+	[2, 4, 6, 10, 11],
+	[2, 5, 7, 11, 12],
+	[2, 6, 12, 13],
+	[3, 9, 14],
+	[3, 4, 8, 10, 14, 15],
+	[4, 5, 9, 11, 15, 16],
+	[5, 6, 10, 12, 16, 17],
+	[6, 7, 11, 13, 17, 18],
+	[7, 12, 18],
+	[8, 9, 15, 19],
+	[9, 10, 14, 16, 19, 20],
+	[10, 11, 15, 17, 20, 21],
+	[11, 12, 16, 18, 21, 22],
+	[12, 13, 17],
+	[14, 15, 20],
+	[15, 16, 19, 21, 22],
+	[16, 17, 20, 22],
+	[17, 20, 21]
+]
+
+# -----------------------------
+# GAME STATE
+# -----------------------------
 
 var board = []
 
 var current_turn = GOAT_TURN
 
-var goats_to_place = 15
-var goats_captured = 0
+var goats_to_place = TOTAL_GOATS
+var captured_goats = 0
 
-var selected_position = -1
+var selected_piece = -1
+var legal_targets = []
 
 var game_over = false
+var show_instructions = false
+
 var winner_text = ""
 var winner_subtitle = ""
 
-var show_instructions = false
+var ai_thinking = false
+var ai_timer = 0.0
 
+var status_message = "Place your goats on the board."
 
-# ============================================================
-# BOARD POSITIONS
-# ============================================================
+var move_number = 1
 
-var positions = [
+# -----------------------------
+# VISUAL ANIMATION
+# -----------------------------
 
-	Vector2(500, 75),
+var pulse_time = 0.0
 
-	Vector2(410, 145),
-	Vector2(590, 145),
+var moving_piece = -1
+var moving_from = Vector2.ZERO
+var moving_to = Vector2.ZERO
+var moving_progress = 0.0
 
-	Vector2(330, 215),
-	Vector2(415, 215),
-	Vector2(500, 215),
-	Vector2(585, 215),
-	Vector2(670, 215),
+var capture_flash = 0.0
+var invalid_flash = 0.0
 
-	Vector2(285, 300),
-	Vector2(355, 300),
-	Vector2(430, 300),
-	Vector2(570, 300),
-	Vector2(645, 300),
-	Vector2(715, 300),
+var last_move_from = -1
+var last_move_to = -1
 
-	Vector2(330, 390),
-	Vector2(415, 390),
-	Vector2(500, 390),
-	Vector2(585, 390),
-	Vector2(670, 390),
+# -----------------------------
+# COLORS
+# -----------------------------
 
-	Vector2(410, 475),
-	Vector2(500, 475),
-	Vector2(590, 475),
+var bg_color = Color("#101820")
+var panel_color = Color("#182630")
+var panel_light = Color("#223542")
 
-	Vector2(500, 550)
-]
+var board_line_color = Color("#B9A77B")
+var board_point_color = Color("#D8C59A")
 
+var goat_color = Color("#F2E4C9")
+var goat_outline = Color("#6D4C41")
 
-# ============================================================
-# BOARD CONNECTIONS
-# ============================================================
+var tiger_color = Color("#E79A32")
+var tiger_outline = Color("#5A3015")
 
-var connections = [
+var accent_color = Color("#FFD54F")
+var green_color = Color("#74D99A")
+var red_color = Color("#F27777")
+var blue_color = Color("#71B7FF")
 
-	[1, 2],
+var white_color = Color("#F5F5F5")
+var muted_color = Color("#AAB8C2")
 
-	[0, 2, 3, 4],
+var font
 
-	[0, 1, 4, 5],
+# -----------------------------
+# BUTTONS
+# -----------------------------
 
-	[1, 4, 8, 9],
+var how_button = Rect2(660, 25, 135, 42)
+var restart_button = Rect2(810, 25, 145, 42)
 
-	[1, 2, 3, 5, 9, 10],
-
-	[2, 4, 6, 10, 11],
-
-	[2, 5, 7, 11, 12],
-
-	[2, 6, 12, 13],
-
-	[3, 9, 14],
-
-	[3, 4, 8, 10, 14, 15],
-
-	[4, 5, 9, 11, 15, 16],
-
-	[5, 6, 10, 12, 16, 17],
-
-	[6, 7, 11, 13, 17, 18],
-
-	[7, 12, 18],
-
-	[8, 9, 15, 19],
-
-	[9, 10, 14, 16, 19, 20],
-
-	[10, 11, 15, 17, 20, 21],
-
-	[11, 12, 16, 18, 21, 22],
-
-	[12, 13, 17],
-
-	[14, 15, 20],
-
-	[15, 16, 19, 21, 22],
-
-	[16, 17, 20, 22],
-
-	[17, 20, 21]
-]
-
+var close_button = Rect2(390, 585, 220, 50)
+var play_again_button = Rect2(370, 440, 260, 55)
 
 # ============================================================
-# START GAME
+# READY
 # ============================================================
 
 func _ready():
-
-	DisplayServer.window_set_size(Vector2i(1000, 650))
+	font = ThemeDB.fallback_font
 
 	start_new_game()
 
+	queue_redraw()
+
 
 # ============================================================
-# START / RESTART GAME
+# NEW GAME
 # ============================================================
 
 func start_new_game():
-
 	board.clear()
 
-	for i in range(23):
-
+	for i in range(points.size()):
 		board.append(EMPTY)
 
-
-	# Three tigers start at the top
-
+	# Three Tigers start at top
 	board[0] = TIGER
 	board[1] = TIGER
 	board[2] = TIGER
 
-
 	current_turn = GOAT_TURN
 
-	goats_to_place = 15
-	goats_captured = 0
+	goats_to_place = TOTAL_GOATS
+	captured_goats = 0
 
-	selected_position = -1
+	selected_piece = -1
+	legal_targets.clear()
 
 	game_over = false
+	show_instructions = false
 
 	winner_text = ""
 	winner_subtitle = ""
 
-	show_instructions = false
+	ai_thinking = false
+	ai_timer = 0.0
+
+	status_message = "Your turn: place a goat."
+
+	move_number = 1
+
+	moving_piece = -1
+	moving_from = Vector2.ZERO
+	moving_to = Vector2.ZERO
+	moving_progress = 0.0
+
+	capture_flash = 0.0
+	invalid_flash = 0.0
+
+	last_move_from = -1
+	last_move_to = -1
+
+	queue_redraw()
+
+
+# ============================================================
+# PROCESS
+# ============================================================
+
+func _process(delta):
+	pulse_time += delta
+
+	if capture_flash > 0:
+		capture_flash -= delta
+
+	if invalid_flash > 0:
+		invalid_flash -= delta
+
+	# Piece movement animation
+	if moving_piece != -1:
+		moving_progress += delta * 3.5
+
+		if moving_progress >= 1.0:
+			moving_progress = 1.0
+			moving_piece = -1
+
+		queue_redraw()
+
+	# Tiger Strategist thinking
+	if ai_thinking:
+		ai_timer -= delta
+
+		if ai_timer <= 0:
+			ai_thinking = false
+			perform_ai_turn()
 
 	queue_redraw()
 
@@ -194,1033 +268,1142 @@ func start_new_game():
 # ============================================================
 
 func _draw():
+	draw_background()
+	draw_header()
+	draw_board()
+	draw_pieces()
+	draw_selection()
+	draw_bottom_panel()
 
-	var font = ThemeDB.fallback_font
+	if ai_thinking:
+		draw_ai_thinking()
+
+	if show_instructions:
+		draw_instructions()
+
+	if game_over:
+		draw_game_over()
 
 
-	# ========================================================
-	# BACKGROUND
-	# ========================================================
+# ============================================================
+# BACKGROUND
+# ============================================================
+
+func draw_background():
+	draw_rect(
+		Rect2(0, 0, BOARD_WIDTH, BOARD_HEIGHT),
+		bg_color
+	)
+
+	# Decorative circles
+	for i in range(8):
+		var x = 80 + i * 125
+		var y = 110 + sin(pulse_time * 0.3 + i) * 15
+
+		draw_circle(
+			Vector2(x, y),
+			80,
+			Color(0.12, 0.18, 0.22, 0.18)
+		)
+
+	# Main play area
+	draw_rect(
+		Rect2(40, 85, 920, 500),
+		Color("#14212A")
+	)
 
 	draw_rect(
-		Rect2(0, 0, 1000, 650),
-		Color("#F3E5C8")
+		Rect2(40, 85, 920, 500),
+		Color("#263844"),
+		false,
+		2.0
 	)
 
 
-	# ========================================================
-	# TITLE
-	# ========================================================
+# ============================================================
+# HEADER
+# ============================================================
 
+func draw_header():
+	# Title
 	draw_string(
 		font,
-		Vector2(350, 32),
+		Vector2(40, 48),
 		"AADU PULI AATTAM",
 		HORIZONTAL_ALIGNMENT_LEFT,
 		-1,
-		27,
-		Color("#4A2C20")
+		30,
+		accent_color
 	)
 
 	draw_string(
 		font,
-		Vector2(405, 55),
-		"GOATS & TIGERS",
+		Vector2(40, 72),
+		"GOATS & TIGERS  •  VERSION 2",
 		HORIZONTAL_ALIGNMENT_LEFT,
 		-1,
 		14,
-		Color("#7A5545")
+		muted_color
 	)
 
-
-	# ========================================================
-	# INSTRUCTIONS BUTTON
-	# ========================================================
-
-	draw_rect(
-		Rect2(680, 20, 140, 38),
-		Color("#8B5E3C")
-	)
-
-	draw_string(
-		font,
-		Vector2(705, 45),
+	# How to play
+	draw_button(
+		how_button,
 		"HOW TO PLAY",
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		13,
-		Color.WHITE
+		blue_color
 	)
 
-
-	# ========================================================
-	# RESTART BUTTON
-	# ========================================================
-
-	draw_rect(
-		Rect2(835, 20, 125, 38),
-		Color("#6B4636")
-	)
-
-	draw_string(
-		font,
-		Vector2(862, 45),
+	# Restart
+	draw_button(
+		restart_button,
 		"RESTART",
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		14,
-		Color.WHITE
+		red_color
 	)
 
 
-	# ========================================================
-	# BOARD CONNECTIONS
-	# ========================================================
+# ============================================================
+# BOARD
+# ============================================================
 
-	for i in range(positions.size()):
-
-		for connected in connections[i]:
-
-			if connected > i:
-
+func draw_board():
+	# Draw connections
+	for i in range(connections.size()):
+		for j in connections[i]:
+			if j > i:
 				draw_line(
-					positions[i],
-					positions[connected],
-					Color("#6B4636"),
-					4.0
+					points[i],
+					points[j],
+					board_line_color,
+					3.0
 				)
 
-
-	# ========================================================
-	# BOARD POINTS
-	# ========================================================
-
-	for i in range(positions.size()):
+	# Draw board points
+	for i in range(points.size()):
+		var p = points[i]
 
 		draw_circle(
-			positions[i],
-			POINT_RADIUS,
-			Color("#D4A373")
+			p,
+			POINT_RADIUS + 5,
+			Color("#0C1419")
 		)
 
 		draw_circle(
-			positions[i],
+			p,
 			POINT_RADIUS,
-			Color("#4A2C20"),
-			false,
-			2.5
+			board_point_color
+		)
+
+		draw_circle(
+			p,
+			POINT_RADIUS - 7,
+			Color("#75664B")
 		)
 
 
-	# ========================================================
-	# PIECES
-	# ========================================================
+# ============================================================
+# PIECES
+# ============================================================
 
+func draw_pieces():
 	for i in range(board.size()):
+		if board[i] == EMPTY:
+			continue
 
-		if board[i] == GOAT:
+		# If this piece is currently moving,
+		# draw it at the animated location.
+		if i == moving_piece:
+			continue
 
-			draw_goat(positions[i])
+		draw_piece(i, board[i], points[i])
 
-		elif board[i] == TIGER:
+	# Animated moving piece
+	if moving_piece != -1:
+		var pos = moving_from.lerp(
+			moving_to,
+			moving_progress
+		)
 
-			draw_tiger(positions[i])
-
-
-	# ========================================================
-	# SELECTED PIECE
-	# ========================================================
-
-	if selected_position != -1 and not game_over:
-
-		draw_circle(
-			positions[selected_position],
-			POINT_RADIUS + 8,
-			Color("#FFD54F"),
-			false,
-			4.0
+		draw_piece(
+			moving_piece,
+			board[moving_piece],
+			pos
 		)
 
 
-	# ========================================================
-	# BOTTOM INFORMATION PANEL
-	# ========================================================
-
-	draw_rect(
-		Rect2(20, 580, 960, 55),
-		Color("#4A2C20")
-	)
-
-
-	# ========================================================
-	# TURN DISPLAY
-	# ========================================================
-
-	var turn_text = ""
-
-	if game_over:
-
-		turn_text = winner_text
-
-	elif current_turn == GOAT_TURN:
-
-		if goats_to_place > 0:
-
-			turn_text = "🐐 GOATS TURN - PLACE A GOAT"
-
-		else:
-
-			turn_text = "🐐 GOATS TURN - MOVE A GOAT"
-
-	else:
-
-		turn_text = "🐯 TIGERS TURN"
-
-
-	draw_string(
-		font,
-		Vector2(40, 614),
-		turn_text,
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		16,
-		Color.WHITE
-	)
-
-
-	# ========================================================
-	# GOATS TO PLACE
-	# ========================================================
-
-	draw_string(
-		font,
-		Vector2(450, 614),
-		"Goats to place: " + str(goats_to_place),
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		16,
-		Color.WHITE
-	)
-
-
-	# ========================================================
-	# CAPTURE COUNTER
-	# ========================================================
-
-	draw_string(
-		font,
-		Vector2(750, 614),
-		"Captured: " + str(goats_captured) + " / 5",
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		16,
-		Color.WHITE
-	)
-
-
-	# ========================================================
-	# INSTRUCTIONS WINDOW
-	# ========================================================
-
-	if show_instructions:
-
-		draw_instructions(font)
-
-
-	# ========================================================
-	# GAME OVER WINDOW
-	# ========================================================
-
-	if game_over:
-
-		draw_game_over(font)
-
-
 # ============================================================
-# DRAW GOAT
+# DRAW ONE PIECE
 # ============================================================
 
-func draw_goat(pos: Vector2):
+func draw_piece(index, piece_type, pos):
+	var is_goat = piece_type == GOAT
 
+	var main_color = goat_color if is_goat else tiger_color
+	var outline_color = goat_outline if is_goat else tiger_outline
+
+	# Shadow
 	draw_circle(
-		pos,
-		16,
-		Color("#F5F5F5")
-	)
-
-	draw_circle(
-		pos,
-		16,
-		Color("#5D4037"),
-		false,
-		2.5
-	)
-
-	var font = ThemeDB.fallback_font
-
-	draw_string(
-		font,
-		pos + Vector2(-6, 6),
-		"G",
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		17,
-		Color("#5D4037")
-	)
-
-
-# ============================================================
-# DRAW TIGER
-# ============================================================
-
-func draw_tiger(pos: Vector2):
-
-	draw_circle(
-		pos,
-		17,
-		Color("#E88B32")
-	)
-
-	draw_circle(
-		pos,
-		17,
-		Color("#4A2C20"),
-		false,
-		2.5
-	)
-
-	var font = ThemeDB.fallback_font
-
-	draw_string(
-		font,
-		pos + Vector2(-6, 6),
-		"T",
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		17,
-		Color("#4A2C20")
-	)
-
-
-# ============================================================
-# INSTRUCTIONS WINDOW
-# ============================================================
-
-func draw_instructions(font):
-
-	# Dark overlay
-
-	draw_rect(
-		Rect2(0, 0, 1000, 650),
+		pos + Vector2(3, 5),
+		28,
 		Color(0, 0, 0, 0.35)
 	)
 
+	# Outer ring
+	draw_circle(
+		pos,
+		27,
+		outline_color
+	)
 
-	# Main panel
+	# Main body
+	draw_circle(
+		pos,
+		23,
+		main_color
+	)
+
+	# Highlight
+	draw_circle(
+		pos + Vector2(-7, -7),
+		7,
+		Color(1, 1, 1, 0.35)
+	)
+
+	# Simple piece symbol
+	if is_goat:
+		draw_string(
+			font,
+			pos + Vector2(-8, 8),
+			"G",
+			HORIZONTAL_ALIGNMENT_LEFT,
+			-1,
+			19,
+			goat_outline
+		)
+	else:
+		draw_string(
+			font,
+			pos + Vector2(-9, 8),
+			"T",
+			HORIZONTAL_ALIGNMENT_LEFT,
+			-1,
+			19,
+			tiger_outline
+		)
+
+
+# ============================================================
+# SELECTION
+# ============================================================
+
+func draw_selection():
+	if selected_piece == -1:
+		return
+
+	if selected_piece >= points.size():
+		return
+
+	var p = points[selected_piece]
+
+	var radius = 34.0 + sin(pulse_time * 5.0) * 4.0
+
+	draw_arc(
+		p,
+		radius,
+		0,
+		TAU,
+		48,
+		accent_color,
+		4.0
+	)
+
+	# Legal target highlights
+	for target in legal_targets:
+		var target_pos = points[target]
+
+		draw_circle(
+			target_pos,
+			30,
+			Color(0.35, 1.0, 0.55, 0.22)
+		)
+
+		draw_arc(
+			target_pos,
+			31,
+			0,
+			TAU,
+			32,
+			green_color,
+			3.0
+		)
+
+
+# ============================================================
+# BOTTOM STATUS PANEL
+# ============================================================
+
+func draw_bottom_panel():
+	# Increased height and moved upward so every line
+	# remains completely visible inside the 700px window.
+	var panel = Rect2(40, 575, 920, 105)
 
 	draw_rect(
-		Rect2(180, 75, 640, 500),
-		Color("#FFF8E7")
+		panel,
+		panel_color
 	)
 
 	draw_rect(
-		Rect2(180, 75, 640, 500),
-		Color("#4A2C20"),
+		panel,
+		Color("#334957"),
+		false,
+		2.0
+	)
+
+	# Turn
+	var turn_text = ""
+	var turn_color = white_color
+
+	if current_turn == GOAT_TURN:
+		turn_text = "YOUR TURN"
+		turn_color = green_color
+	else:
+		turn_text = "TIGERS TURN"
+		turn_color = tiger_color
+
+	draw_string(
+		font,
+		Vector2(60, 605),
+		turn_text,
+		HORIZONTAL_ALIGNMENT_LEFT,
+		-1,
+		20,
+		turn_color
+	)
+
+	# Goat placement
+	draw_string(
+		font,
+		Vector2(250, 605),
+		"Goats to place: " + str(goats_to_place),
+		HORIZONTAL_ALIGNMENT_LEFT,
+		-1,
+		15,
+		white_color
+	)
+
+	# Captured
+	draw_string(
+		font,
+		Vector2(470, 605),
+		"Captured: " + str(captured_goats) + "/" + str(TIGER_WIN_CAPTURES),
+		HORIZONTAL_ALIGNMENT_LEFT,
+		-1,
+		15,
+		white_color
+	)
+
+	# Move number
+	draw_string(
+		font,
+		Vector2(700, 605),
+		"Move: " + str(move_number),
+		HORIZONTAL_ALIGNMENT_LEFT,
+		-1,
+		15,
+		muted_color
+	)
+
+	# Message
+	draw_string(
+		font,
+		Vector2(60, 650),
+		status_message,
+		HORIZONTAL_ALIGNMENT_LEFT,
+		-1,
+		14,
+		muted_color
+	)
+
+
+# ============================================================
+# TIGER STRATEGIST THINKING
+# ============================================================
+
+func draw_ai_thinking():
+	var box = Rect2(340, 300, 320, 70)
+
+	draw_rect(
+		box,
+		Color("#182A35")
+	)
+
+	draw_rect(
+		box,
+		tiger_color,
+		false,
+		3.0
+	)
+
+	var dots = ""
+	var phase = int(pulse_time * 3.0) % 4
+
+	for i in range(phase):
+		dots += "."
+
+	draw_string(
+		font,
+		Vector2(390, 343),
+		"Tiger Strategist" + dots,
+		HORIZONTAL_ALIGNMENT_LEFT,
+		-1,
+		21,
+		tiger_color
+	)
+
+
+# ============================================================
+# BUTTON DRAWING
+# ============================================================
+
+func draw_button(rect, text, color):
+	draw_rect(
+		rect,
+		Color("#1E303B")
+	)
+
+	draw_rect(
+		rect,
+		color,
+		false,
+		2.0
+	)
+
+	draw_string(
+		font,
+		Vector2(rect.position.x + 15, rect.position.y + 27),
+		text,
+		HORIZONTAL_ALIGNMENT_LEFT,
+		-1,
+		14,
+		white_color
+	)
+
+
+# ============================================================
+# INSTRUCTIONS
+# ============================================================
+
+func draw_instructions():
+	# Dark overlay
+	draw_rect(
+		Rect2(0, 0, BOARD_WIDTH, BOARD_HEIGHT),
+		Color(0, 0, 0, 0.78)
+	)
+
+	var box = Rect2(150, 90, 700, 525)
+
+	draw_rect(
+		box,
+		Color("#16252E")
+	)
+
+	draw_rect(
+		box,
+		accent_color,
+		false,
+		3.0
+	)
+
+	draw_string(
+		font,
+		Vector2(200, 135),
+		"HOW TO PLAY",
+		HORIZONTAL_ALIGNMENT_LEFT,
+		-1,
+		30,
+		accent_color
+	)
+
+	draw_string(
+		font,
+		Vector2(200, 175),
+		"Human vs Tiger Strategist",
+		HORIZONTAL_ALIGNMENT_LEFT,
+		-1,
+		17,
+		blue_color
+	)
+
+	var lines = [
+		"1. You control the GOATS.",
+		"2. The Tiger Strategist controls all 3 TIGERS.",
+		"3. Place your 15 goats on empty board points.",
+		"4. After placement, move goats along connected lines.",
+		"5. Tigers can move along connected lines.",
+		"6. Tigers can jump over goats to capture them.",
+		"7. Tigers win after capturing 5 goats.",
+		"8. Goats win when all 3 tigers are blocked.",
+		"",
+		"CLICK a piece, then click a green highlighted point.",
+		"Yellow ring = selected piece.",
+		"Green ring = legal destination."
+	]
+
+	var y = 215
+
+	for line in lines:
+		draw_string(
+			font,
+			Vector2(200, y),
+			line,
+			HORIZONTAL_ALIGNMENT_LEFT,
+			-1,
+			15,
+			white_color
+		)
+
+		y += 27
+
+	draw_button(
+		close_button,
+		"CLOSE",
+		green_color
+	)
+
+
+# ============================================================
+# GAME OVER
+# ============================================================
+
+func draw_game_over():
+	draw_rect(
+		Rect2(0, 0, BOARD_WIDTH, BOARD_HEIGHT),
+		Color(0, 0, 0, 0.82)
+	)
+
+	var box = Rect2(190, 140, 620, 390)
+
+	draw_rect(
+		box,
+		Color("#16252E")
+	)
+
+	var border_color = green_color
+
+	if "TIGERS" in winner_text:
+		border_color = tiger_color
+
+	draw_rect(
+		box,
+		border_color,
 		false,
 		4.0
 	)
 
-
-	# Title
-
 	draw_string(
 		font,
-		Vector2(390, 120),
-		"HOW TO PLAY",
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		27,
-		Color("#4A2C20")
-	)
-
-
-	# Goats heading
-
-	draw_string(
-		font,
-		Vector2(235, 165),
-		"GOATS",
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		21,
-		Color("#5D4037")
-	)
-
-
-	draw_string(
-		font,
-		Vector2(235, 195),
-		"1. Place 15 goats on empty board points.",
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		16,
-		Color("#4A2C20")
-	)
-
-
-	draw_string(
-		font,
-		Vector2(235, 225),
-		"2. After placing all goats, move them",
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		16,
-		Color("#4A2C20")
-	)
-
-
-	draw_string(
-		font,
-		Vector2(255, 250),
-		"along connected lines.",
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		16,
-		Color("#4A2C20")
-	)
-
-
-	draw_string(
-		font,
-		Vector2(235, 280),
-		"3. Block all three tigers to win.",
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		16,
-		Color("#4A2C20")
-	)
-
-
-	# Tigers heading
-
-	draw_string(
-		font,
-		Vector2(235, 325),
-		"TIGERS",
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		21,
-		Color("#E07820")
-	)
-
-
-	draw_string(
-		font,
-		Vector2(235, 355),
-		"1. Select a tiger and move along a line.",
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		16,
-		Color("#4A2C20")
-	)
-
-
-	draw_string(
-		font,
-		Vector2(235, 385),
-		"2. Jump over a goat to capture it.",
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		16,
-		Color("#4A2C20")
-	)
-
-
-	draw_string(
-		font,
-		Vector2(235, 415),
-		"3. Capture 5 goats to win.",
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		16,
-		Color("#4A2C20")
-	)
-
-
-	# Controls
-
-	draw_string(
-		font,
-		Vector2(235, 455),
-		"Click a piece to select it.",
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		15,
-		Color("#7A5545")
-	)
-
-	draw_string(
-		font,
-		Vector2(235, 480),
-		"Click a connected empty point to move.",
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		15,
-		Color("#7A5545")
-	)
-
-
-	# Close button
-
-	draw_rect(
-		Rect2(430, 510, 140, 42),
-		Color("#6B4636")
-	)
-
-	draw_string(
-		font,
-		Vector2(468, 537),
-		"CLOSE",
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		15,
-		Color.WHITE
-	)
-
-
-# ============================================================
-# GAME OVER WINDOW
-# ============================================================
-
-func draw_game_over(font):
-
-	# Dark overlay
-
-	draw_rect(
-		Rect2(0, 0, 1000, 650),
-		Color(0, 0, 0, 0.42)
-	)
-
-
-	# Main game-over panel
-
-	draw_rect(
-		Rect2(235, 180, 530, 300),
-		Color("#FFF8E7")
-	)
-
-	draw_rect(
-		Rect2(235, 180, 530, 300),
-		Color("#4A2C20"),
-		false,
-		5.0
-	)
-
-
-	# Winner title
-
-	draw_string(
-		font,
-		Vector2(365, 245),
+		Vector2(300, 230),
 		winner_text,
 		HORIZONTAL_ALIGNMENT_LEFT,
 		-1,
-		27,
-		Color("#4A2C20")
+		38,
+		border_color
 	)
-
-
-	# Subtitle
 
 	draw_string(
 		font,
-		Vector2(370, 285),
+		Vector2(285, 275),
 		winner_subtitle,
 		HORIZONTAL_ALIGNMENT_LEFT,
 		-1,
 		18,
-		Color("#7A5545")
+		white_color
 	)
-
-
-	# Final score
 
 	draw_string(
 		font,
-		Vector2(375, 325),
-		"Goats captured: " + str(goats_captured) + " / 5",
+		Vector2(345, 325),
+		"Final Score",
 		HORIZONTAL_ALIGNMENT_LEFT,
 		-1,
-		16,
-		Color("#4A2C20")
-	)
-
-
-	# Play Again button
-
-	draw_rect(
-		Rect2(370, 370, 260, 55),
-		Color("#6B4636")
+		17,
+		muted_color
 	)
 
 	draw_string(
 		font,
-		Vector2(433, 405),
+		Vector2(420, 365),
+		str(captured_goats) + " / " + str(TIGER_WIN_CAPTURES),
+		HORIZONTAL_ALIGNMENT_LEFT,
+		-1,
+		30,
+		white_color
+	)
+
+	draw_button(
+		play_again_button,
 		"PLAY AGAIN",
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1,
-		20,
-		Color.WHITE
+		border_color
 	)
 
 
 # ============================================================
-# MOUSE INPUT
+# INPUT
 # ============================================================
 
 func _input(event):
+	if not event is InputEventMouseButton:
+		return
 
-	if event is InputEventMouseButton:
+	if event.button_index != MOUSE_BUTTON_LEFT:
+		return
 
-		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+	if not event.pressed:
+		return
 
-			var mouse_position = get_global_mouse_position()
+	var mouse_pos = event.position
 
-
-			# ==================================================
-			# GAME OVER - PLAY AGAIN
-			# ==================================================
-
-			if game_over:
-
-				if Rect2(370, 370, 260, 55).has_point(mouse_position):
-
-					start_new_game()
-
-				return
-
-
-			# ==================================================
-			# INSTRUCTIONS
-			# ==================================================
-
-			if show_instructions:
-
-				if Rect2(430, 510, 140, 42).has_point(mouse_position):
-
-					show_instructions = false
-
-					queue_redraw()
-
-				return
-
-
-			# ==================================================
-			# HOW TO PLAY BUTTON
-			# ==================================================
-
-			if Rect2(680, 20, 140, 38).has_point(mouse_position):
-
-				show_instructions = true
-
-				selected_position = -1
-
-				queue_redraw()
-
-				return
-
-
-			# ==================================================
-			# RESTART BUTTON
-			# ==================================================
-
-			if Rect2(835, 20, 125, 38).has_point(mouse_position):
-
-				start_new_game()
-
-				return
-
-
-			# ==================================================
-			# BOARD
-			# ==================================================
-
-			var clicked = find_board_position(mouse_position)
-
-			if clicked != -1:
-
-				handle_click(clicked)
-
-
-# ============================================================
-# FIND BOARD POSITION
-# ============================================================
-
-func find_board_position(mouse_position: Vector2) -> int:
-
-	for i in range(positions.size()):
-
-		var distance = positions[i].distance_to(mouse_position)
-
-		if distance <= CLICK_RADIUS:
-
-			return i
-
-	return -1
-
-
-# ============================================================
-# HANDLE CLICK
-# ============================================================
-
-func handle_click(position: int):
-
+	# Game over
 	if game_over:
+		if play_again_button.has_point(mouse_pos):
+			start_new_game()
 
 		return
 
+	# Instructions
+	if show_instructions:
+		if close_button.has_point(mouse_pos):
+			show_instructions = false
+			queue_redraw()
 
-	# ========================================================
+		return
+
+	# How to play
+	if how_button.has_point(mouse_pos):
+		show_instructions = true
+		queue_redraw()
+		return
+
+	# Restart
+	if restart_button.has_point(mouse_pos):
+		start_new_game()
+		return
+
+	# Human only
+	if current_turn != GOAT_TURN:
+		return
+
+	if ai_thinking:
+		return
+
+	handle_player_click(mouse_pos)
+
+
+# ============================================================
+# PLAYER CLICK
+# ============================================================
+
+func handle_player_click(mouse_pos):
+	var clicked_point = get_nearest_point(mouse_pos)
+
+	if clicked_point == -1:
+		return
+
+	# --------------------------------------------------------
 	# GOAT PLACEMENT
-	# ========================================================
+	# --------------------------------------------------------
 
-	if current_turn == GOAT_TURN and goats_to_place > 0:
-
-		if board[position] == EMPTY:
-
-			board[position] = GOAT
+	if goats_to_place > 0:
+		if board[clicked_point] == EMPTY:
+			board[clicked_point] = GOAT
 
 			goats_to_place -= 1
+			move_number += 1
 
-			selected_position = -1
+			status_message = "Goat placed. Tiger Strategist is thinking."
 
-
-			# Check goat victory
-
-			if all_tigers_blocked():
-
-				game_over = true
-
-				winner_text = "GOATS WIN!"
-
-				winner_subtitle = "TIGERS ARE BLOCKED"
-
-				queue_redraw()
-
-				return
-
+			last_move_to = clicked_point
 
 			current_turn = TIGER_TURN
 
+			check_game_state()
+
+			if not game_over:
+				start_ai_turn()
+
 			queue_redraw()
+
+		else:
+			show_invalid_move("Choose an empty point.")
 
 		return
 
+	# --------------------------------------------------------
+	# NORMAL GOAT MOVEMENT
+	# --------------------------------------------------------
 
-	# ========================================================
-	# SELECT PIECE
-	# ========================================================
+	if selected_piece == -1:
+		if board[clicked_point] == GOAT:
+			select_piece(clicked_point)
+		else:
+			show_invalid_move("Select one of your goats.")
 
-	if selected_position == -1:
+		return
 
-		if current_turn == GOAT_TURN:
+	# Deselect
+	if clicked_point == selected_piece:
+		selected_piece = -1
+		legal_targets.clear()
+		status_message = "Selection cleared."
+		queue_redraw()
+		return
 
-			if board[position] == GOAT:
+	# Move
+	if clicked_point in legal_targets:
+		move_piece(selected_piece, clicked_point)
 
-				selected_position = position
+		selected_piece = -1
+		legal_targets.clear()
 
-		elif current_turn == TIGER_TURN:
+		move_number += 1
+		current_turn = TIGER_TURN
 
-			if board[position] == TIGER:
+		check_game_state()
 
-				selected_position = position
+		if not game_over:
+			start_ai_turn()
 
 		queue_redraw()
 
-		return
-
-
-	# ========================================================
-	# DESELECT
-	# ========================================================
-
-	if selected_position == position:
-
-		selected_position = -1
-
-		queue_redraw()
-
-		return
-
-
-	# ========================================================
-	# MOVE
-	# ========================================================
-
-	try_move(selected_position, position)
+	else:
+		show_invalid_move("That is not a legal goat move.")
 
 
 # ============================================================
-# TRY MOVE
+# SELECT PIECE
 # ============================================================
 
-func try_move(from: int, to: int):
-
-
-	# ========================================================
-	# DESTINATION NOT EMPTY
-	# ========================================================
-
-	if board[to] != EMPTY:
-
-		if current_turn == GOAT_TURN:
-
-			if board[to] == GOAT:
-
-				selected_position = to
-
-				queue_redraw()
-
-		elif current_turn == TIGER_TURN:
-
-			if board[to] == TIGER:
-
-				selected_position = to
-
-				queue_redraw()
-
-		return
-
-
-	# ========================================================
-	# GOAT MOVEMENT
-	# ========================================================
-
-	if current_turn == GOAT_TURN:
-
-		if goats_to_place > 0:
-
-			selected_position = -1
-
-			queue_redraw()
-
-			return
-
-
-		if to in connections[from]:
-
-			board[to] = GOAT
-
-			board[from] = EMPTY
-
-			selected_position = -1
-
-			current_turn = TIGER_TURN
-
-			queue_redraw()
-
-		return
-
-
-	# ========================================================
-	# TIGER MOVEMENT
-	# ========================================================
-
-	if current_turn == TIGER_TURN:
-
-
-		# ----------------------------------------------------
-		# CAPTURE
-		# ----------------------------------------------------
-
-		var capture_point = get_capture_goat(from, to)
-
-		if capture_point != -1:
-
-			board[to] = TIGER
-
-			board[from] = EMPTY
-
-			board[capture_point] = EMPTY
-
-			goats_captured += 1
-
-			selected_position = -1
-
-
-			# Tiger wins
-
-			if goats_captured >= 5:
-
-				game_over = true
-
-				winner_text = "TIGERS WIN!"
-
-				winner_subtitle = "5 GOATS CAPTURED"
-
-				queue_redraw()
-
-				return
-
-
-			current_turn = GOAT_TURN
-
-			queue_redraw()
-
-			return
-
-
-		# ----------------------------------------------------
-		# NORMAL MOVE
-		# ----------------------------------------------------
-
-		if to in connections[from]:
-
-			board[to] = TIGER
-
-			board[from] = EMPTY
-
-			selected_position = -1
-
-			current_turn = GOAT_TURN
-
-
-			# Check goat victory
-
-			if all_tigers_blocked():
-
-				game_over = true
-
-				winner_text = "GOATS WIN!"
-
-				winner_subtitle = "TIGERS ARE BLOCKED"
-
-
-			queue_redraw()
-
-			return
-
-
-	# ========================================================
-	# INVALID MOVE
-	# ========================================================
-
-	selected_position = -1
+func select_piece(index):
+	selected_piece = index
+	legal_targets.clear()
+
+	for target in connections[index]:
+		if board[target] == EMPTY:
+			legal_targets.append(target)
+
+	if legal_targets.is_empty():
+		status_message = "This goat has no legal moves."
+	else:
+		status_message = "Choose a green highlighted point."
 
 	queue_redraw()
 
 
 # ============================================================
-# TIGER CAPTURE CHECK
+# MOVE PIECE
 # ============================================================
 
-func get_capture_goat(from: int, landing: int) -> int:
+func move_piece(from, to):
+	board[to] = board[from]
+	board[from] = EMPTY
 
-	if board[landing] != EMPTY:
+	last_move_from = from
+	last_move_to = to
 
-		return -1
-
-
-	for middle in connections[from]:
-
-		if board[middle] != GOAT:
-
-			continue
-
-
-		if landing not in connections[middle]:
-
-			continue
-
-
-		if are_collinear_jump(from, middle, landing):
-
-			return middle
-
-
-	return -1
-
-
-# ============================================================
-# CHECK STRAIGHT-LINE JUMP
-# ============================================================
-
-func are_collinear_jump(
-	from: int,
-	middle: int,
-	landing: int
-) -> bool:
-
-	var first_vector = positions[middle] - positions[from]
-
-	var second_vector = positions[landing] - positions[middle]
-
-
-	var cross_product = (
-		first_vector.x * second_vector.y
-		- first_vector.y * second_vector.x
+	start_piece_animation(
+		to,
+		points[from],
+		points[to]
 	)
 
 
-	if abs(cross_product) > 1.0:
+# ============================================================
+# START PIECE ANIMATION
+# ============================================================
 
-		return false
-
-
-	var first_length = first_vector.length()
-
-	var second_length = second_vector.length()
-
-
-	if abs(first_length - second_length) > 5.0:
-
-		return false
-
-
-	return true
+func start_piece_animation(index, from_pos, to_pos):
+	moving_piece = index
+	moving_from = from_pos
+	moving_to = to_pos
+	moving_progress = 0.0
 
 
 # ============================================================
-# CHECK IF ALL TIGERS ARE BLOCKED
+# START TIGER STRATEGIST
 # ============================================================
 
-func all_tigers_blocked() -> bool:
+func start_ai_turn():
+	current_turn = TIGER_TURN
+
+	ai_thinking = true
+	ai_timer = 0.75
+
+	status_message = "Tiger Strategist is thinking..."
+
+	queue_redraw()
+
+
+# ============================================================
+# TIGER STRATEGIST TURN
+# ============================================================
+
+func perform_ai_turn():
+	if game_over:
+		return
+
+	# Find all possible tiger moves
+	var capture_moves = []
+	var normal_moves = []
 
 	for i in range(board.size()):
-
 		if board[i] != TIGER:
-
 			continue
 
+		# Captures
+		var captures = get_tiger_capture_moves(i)
+
+		for move in captures:
+			capture_moves.append(move)
 
 		# Normal moves
+		for target in connections[i]:
+			if board[target] == EMPTY:
+				normal_moves.append([i, target])
 
-		for neighbour in connections[i]:
+	# Tiger Strategist priority:
+	# 1. Capture
+	# 2. Strategic movement
+	# 3. Any legal movement
 
-			if board[neighbour] == EMPTY:
+	if not capture_moves.is_empty():
+		var best_capture = choose_best_ai_capture(capture_moves)
 
-				return false
+		execute_ai_capture(
+			best_capture[0],
+			best_capture[1],
+			best_capture[2]
+		)
+
+		return
+
+	if not normal_moves.is_empty():
+		var best_move = choose_best_ai_move(normal_moves)
+
+		execute_ai_normal_move(
+			best_move[0],
+			best_move[1]
+		)
+
+		return
+
+	# No tiger movement
+	current_turn = GOAT_TURN
+
+	status_message = "Tiger Strategist is blocked. Your turn."
+
+	check_game_state()
+
+	queue_redraw()
 
 
-		# Capture moves
+# ============================================================
+# TIGER CAPTURE SEARCH
+# ============================================================
 
-		for middle in connections[i]:
+func get_tiger_capture_moves(tiger_index):
+	var moves = []
 
-			if board[middle] != GOAT:
+	for goat_index in range(board.size()):
+		if board[goat_index] != GOAT:
+			continue
 
+		# Goat must be connected to tiger
+		if not goat_index in connections[tiger_index]:
+			continue
+
+		for landing in connections[goat_index]:
+			if landing == tiger_index:
 				continue
 
+			if board[landing] != EMPTY:
+				continue
 
-			for landing in connections[middle]:
+			if are_collinear_jump(
+				tiger_index,
+				goat_index,
+				landing
+			):
+				moves.append([
+					tiger_index,
+					goat_index,
+					landing
+				])
 
-				if board[landing] != EMPTY:
-
-					continue
+	return moves
 
 
-				if are_collinear_jump(i, middle, landing):
+# ============================================================
+# COLLINEAR CHECK
+# ============================================================
 
-					return false
+func are_collinear_jump(a, b, c):
+	var pa = points[a]
+	var pb = points[b]
+	var pc = points[c]
+
+	var ab = pb - pa
+	var bc = pc - pb
+
+	var cross = ab.x * bc.y - ab.y * bc.x
+
+	if abs(cross) > 8.0:
+		return false
+
+	# Ensure movement is forward
+	var dot = ab.dot(bc)
+
+	return dot > 0
 
 
-	return true
+# ============================================================
+# TIGER STRATEGIST CAPTURE CHOICE
+# ============================================================
+
+func choose_best_ai_capture(moves):
+	var best = moves[0]
+	var best_score = -99999
+
+	for move in moves:
+		var tiger_index = move[0]
+		var goat_index = move[1]
+		var landing = move[2]
+
+		var score = 1000
+
+		# Prefer central landing positions
+		var center_distance = points[landing].distance_to(
+			Vector2(500, 330)
+		)
+
+		score -= center_distance * 0.5
+
+		# Prefer captures that give another capture opportunity
+		board[tiger_index] = EMPTY
+		board[goat_index] = EMPTY
+		board[landing] = TIGER
+
+		var next_captures = get_tiger_capture_moves(landing)
+
+		score += next_captures.size() * 100
+
+		# Restore
+		board[landing] = EMPTY
+		board[goat_index] = GOAT
+		board[tiger_index] = TIGER
+
+		if score > best_score:
+			best_score = score
+			best = move
+
+	return best
+
+
+# ============================================================
+# TIGER STRATEGIST NORMAL MOVE CHOICE
+# ============================================================
+
+func choose_best_ai_move(moves):
+	var best = moves[0]
+	var best_score = -99999
+
+	for move in moves:
+		var from = move[0]
+		var to = move[1]
+
+		var score = 0
+
+		# Prefer center
+		var distance = points[to].distance_to(
+			Vector2(500, 330)
+		)
+
+		score -= distance * 0.35
+
+		# Prefer positions near goats
+		for goat_index in range(board.size()):
+			if board[goat_index] == GOAT:
+				var goat_distance = points[to].distance_to(
+					points[goat_index]
+				)
+
+				if goat_distance < 170:
+					score += 20
+
+				if goat_distance < 100:
+					score += 30
+
+		# Prefer moves that create future captures
+		board[from] = EMPTY
+		board[to] = TIGER
+
+		var future_captures = get_tiger_capture_moves(to)
+
+		score += future_captures.size() * 120
+
+		board[to] = EMPTY
+		board[from] = TIGER
+
+		if score > best_score:
+			best_score = score
+			best = move
+
+	return best
+
+
+# ============================================================
+# TIGER STRATEGIST NORMAL MOVE
+# ============================================================
+
+func execute_ai_normal_move(from, to):
+	move_piece(from, to)
+
+	move_number += 1
+
+	status_message = "Tiger Strategist moved. Your turn."
+
+	current_turn = GOAT_TURN
+
+	check_game_state()
+
+	queue_redraw()
+
+
+# ============================================================
+# TIGER STRATEGIST CAPTURE
+# ============================================================
+
+func execute_ai_capture(tiger_index, goat_index, landing):
+	# Remove captured goat
+	board[tiger_index] = EMPTY
+	board[goat_index] = EMPTY
+	board[landing] = TIGER
+
+	captured_goats += 1
+
+	last_move_from = tiger_index
+	last_move_to = landing
+
+	capture_flash = 1.0
+
+	start_piece_animation(
+		landing,
+		points[tiger_index],
+		points[landing]
+	)
+
+	move_number += 1
+
+	status_message = "Tiger captured a goat! Captured: " + str(captured_goats) + "/" + str(TIGER_WIN_CAPTURES)
+
+	if captured_goats >= TIGER_WIN_CAPTURES:
+		game_over = true
+		winner_text = "TIGERS WIN!"
+		winner_subtitle = "The Tiger Strategist captured 5 goats."
+		current_turn = TIGER_TURN
+		return
+
+	current_turn = GOAT_TURN
+
+	check_game_state()
+
+	queue_redraw()
+
+
+# ============================================================
+# FIND NEAREST BOARD POINT
+# ============================================================
+
+func get_nearest_point(mouse_pos):
+	var closest = -1
+	var closest_distance = CLICK_RADIUS
+
+	for i in range(points.size()):
+		var distance = mouse_pos.distance_to(points[i])
+
+		if distance <= closest_distance:
+			closest_distance = distance
+			closest = i
+
+	return closest
+
+
+# ============================================================
+# INVALID MOVE
+# ============================================================
+
+func show_invalid_move(message):
+	status_message = message
+	invalid_flash = 0.35
+
+	queue_redraw()
+
+
+# ============================================================
+# GAME STATE CHECK
+# ============================================================
+
+func check_game_state():
+	if game_over:
+		return
+
+	# Tiger victory
+	if captured_goats >= TIGER_WIN_CAPTURES:
+		game_over = true
+		winner_text = "TIGERS WIN!"
+		winner_subtitle = "The Tigers captured 5 goats."
+		return
+
+	# Goat victory
+	if all_tigers_blocked():
+		game_over = true
+		winner_text = "GOATS WIN!"
+		winner_subtitle = "All three Tigers are blocked."
+		return
+
+
+# ============================================================
+# TIGER BLOCK CHECK
+# ============================================================
+
+func all_tigers_blocked():
+	var tiger_found = false
+
+	for i in range(board.size()):
+		if board[i] != TIGER:
+			continue
+
+		tiger_found = true
+
+		# Normal move available?
+		for target in connections[i]:
+			if board[target] == EMPTY:
+				return false
+
+		# Capture available?
+		var captures = get_tiger_capture_moves(i)
+
+		if not captures.is_empty():
+			return false
+
+	return tiger_found
+
+
+# ============================================================
+# ESCAPE KEY
+# ============================================================
+
+func _unhandled_key_input(event):
+	if event is InputEventKey:
+		if event.pressed and event.keycode == KEY_ESCAPE:
+			if show_instructions:
+				show_instructions = false
+				queue_redraw()
